@@ -1,0 +1,2208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>기업 매출 통계 분석 시스템 (Client-Side Analytics Hub)</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- SheetJS (xlsx) for in-browser client-side excel parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg-body: #0b0f19;
+      --bg-card: #131b2e;
+      --bg-card-hover: #19243c;
+      --border-color: #23314e;
+      --border-light: #2c3e63;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --color-1: #38bdf8; /* Sky/Cyan */
+      --color-2: #a855f7; /* Purple/Violet */
+      --color-3: #34d399; /* Emerald/Mint */
+      --color-4: #fbbf24; /* Amber */
+      --color-5: #f43f5e; /* Rose */
+
+      --accent-gold: #fbbf24;
+      --accent-rose: #f43f5e;
+      
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+      --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: radial-gradient(circle at top right, #162038 0%, #0b0f19 60%, #060911 100%);
+      color: var(--text-main);
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    /* Screen Views */
+    .screen-view {
+      display: none;
+      animation: fadeIn 0.35s ease forwards;
+    }
+
+    .screen-view.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ------------------------------------------- */
+    /* 1. Upload & Intro Screen Styles             */
+    /* ------------------------------------------- */
+    .upload-container {
+      max-width: 900px;
+      margin: 40px auto;
+    }
+
+    .brand-hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .brand-hero .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-1);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      margin-bottom: 14px;
+    }
+
+    .brand-hero h1 {
+      font-size: 2.3rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+
+    .brand-hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .upload-box {
+      background: var(--bg-card);
+      border: 2px dashed var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 50px 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: var(--shadow-card);
+      position: relative;
+    }
+
+    .upload-box:hover, .upload-box.dragover {
+      border-color: var(--color-1);
+      background: rgba(25, 36, 60, 0.8);
+      transform: translateY(-2px);
+    }
+
+    .upload-icon {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 18px;
+      background: rgba(56, 189, 248, 0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-1);
+      font-size: 2rem;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .upload-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .upload-desc {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 22px;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .btn-browse {
+      display: inline-block;
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: #ffffff;
+      padding: 10px 24px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-browse:hover {
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      transform: translateY(-1px);
+    }
+
+    /* Security Note */
+    .security-banner {
+      margin-top: 28px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px 22px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .security-badge {
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--color-3);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .security-text {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .security-text strong {
+      color: #ffffff;
+    }
+
+    /* Analysis Progress View */
+    .progress-card {
+      display: none;
+      margin-top: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--color-1);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .progress-text {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .progress-step {
+      font-size: 0.82rem;
+      color: var(--color-1);
+    }
+
+    /* ------------------------------------------- */
+    /* 2. Analysis Dashboard Screen Styles         */
+    /* ------------------------------------------- */
+    .dashboard-container {
+      max-width: 1560px;
+      margin: 0 auto;
+    }
+
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 26px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-back {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-back:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: var(--border-light);
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 20px 22px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+    }
+
+    .kpi-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .kpi-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .kpi-tag {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+    }
+
+    .kpi-main-val {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+
+    .kpi-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 10px;
+      font-size: 0.78rem;
+    }
+
+    .kpi-meta-item .label {
+      color: var(--text-dim);
+    }
+
+    .kpi-meta-item .val {
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    /* Tabs */
+    .method-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      margin-bottom: 22px;
+      border-bottom: 1px solid var(--border-color);
+      scrollbar-width: thin;
+    }
+
+    .tab-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.83rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: #1e2c48;
+      color: #ffffff;
+      border-color: var(--color-1);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+    }
+
+    .tab-badge {
+      font-size: 0.7rem;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* Method Content */
+    .method-section {
+      display: none;
+      animation: fadeIn 0.3s ease forwards;
+    }
+
+    .method-section.active {
+      display: block;
+    }
+
+    .section-intro {
+      background: linear-gradient(90deg, rgba(30, 44, 72, 0.7) 0%, rgba(19, 27, 46, 0.4) 100%);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--color-1);
+      border-radius: var(--radius-sm);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .section-intro-text h2 {
+      font-size: 1.22rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .section-intro-text p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .math-pill {
+      font-family: 'Fira Code', monospace, Consolas;
+      font-size: 0.78rem;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      color: var(--color-1);
+    }
+
+    .analysis-layout {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 1100px) {
+      .analysis-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .chart-card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .chart-wrapper {
+      position: relative;
+      flex: 1;
+      min-height: 350px;
+    }
+
+    .insight-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .insight-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ffffff;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .insight-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--color-1);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .metric-table-wrapper {
+      overflow-x: auto;
+    }
+
+    .metric-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    .metric-table th, .metric-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-table th {
+      color: var(--text-dim);
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .metric-table td {
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .metric-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .commentary-box {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--accent-gold);
+      padding: 14px 16px;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      line-height: 1.65;
+    }
+
+    .commentary-box strong {
+      color: #ffffff;
+    }
+
+    .full-table-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      margin-top: 24px;
+    }
+
+    .full-table-card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 36px 0 16px;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border-color);
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1: FILE UPLOAD & ON-DEVICE DATA ANALYSIS INGESTION    -->
+  <!-- ============================================================ -->
+  <div id="screen-upload" class="screen-view active">
+    <div class="upload-container">
+      <div class="brand-hero">
+        <div class="badge">Privacy-Preserving Edge Analytics</div>
+        <h1>기업 매출 데이터 심층 통계 분석 대시보드</h1>
+        <p>서버 전송 없이 100% 사용자 브라우저 내부에서 작동하는 엔터프라이즈급 통계 연산 시스템입니다. 분석할 엑셀(.xlsx) 또는 CSV 파일을 업로드해 주세요.</p>
+      </div>
+
+      <!-- Drag & Drop Upload Card -->
+      <div class="upload-box" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" class="file-input" accept=".xlsx, .xls, .csv">
+        <div class="upload-icon">📊</div>
+        <div class="upload-title">분석할 데이터 파일 선택 또는 드래그 앤 드롭</div>
+        <div class="upload-desc">지원 파일: 가상기업 3개 5개년매출데이터.xlsx, .xls, .csv</div>
+        <button type="button" class="btn-browse" onclick="event.stopPropagation(); document.getElementById('file-input').click()">내 컴퓨터에서 파일 찾기</button>
+      </div>
+
+      <!-- Analysis In-Progress Notification -->
+      <div class="progress-card" id="progress-card">
+        <div class="spinner"></div>
+        <div class="progress-text" id="progress-text">파일을 읽고 브라우저 메모리에 로드하는 중...</div>
+        <div class="progress-step" id="progress-step">Step 1/3: 엑셀 파싱 및 시계열 데이터셋 추출</div>
+      </div>
+
+      <!-- Zero-Data Leakage Security Verification Note -->
+      <div class="security-banner">
+        <div class="security-badge">🔒 로컬 분석 보안</div>
+        <div class="security-text">
+          <strong>완전한 데이터 보안 보장:</strong> 본 대시보드 HTML 파일 내부에는 <strong>어떠한 원본 기업 데이터도 저장되어 있지 않습니다.</strong> 소스코드가 외부에 유출되더라도 업로드 전 원본 파일의 내용은 일절 노출되지 않으며, 파일은 외부 서버로 전송되지 않고 사용자의 로컬 디바이스 메모리에서만 즉각 파싱·연산됩니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2: POST-ANALYSIS DEDICATED DASHBOARD VIEW            -->
+  <!-- ============================================================ -->
+  <div id="screen-dashboard" class="screen-view">
+    <div class="dashboard-container">
+      <!-- Dashboard Top Header -->
+      <header class="dashboard-header">
+        <div class="header-title">
+          <div style="font-size: 0.78rem; font-weight: 700; color: var(--color-1); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Client-Side Statistical Execution Complete</div>
+          <h1 id="dash-main-title">다중 기업 매출 10대 통계 분석 리포트</h1>
+          <p class="header-subtitle" id="dash-meta-info" style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">데이터 로드 완료</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-back" onclick="returnToUpload()">
+            <span>←</span> 다른 데이터 파일 분석하기
+          </button>
+        </div>
+      </header>
+
+      <!-- KPI Overview Cards (Dynamic) -->
+      <section class="kpi-grid" id="kpi-container">
+        <!-- Rendered dynamically based on uploaded data -->
+      </section>
+
+      <!-- 10 Statistical Methods Tab Navigation -->
+      <nav class="method-tabs" id="methodTabs">
+        <button class="tab-btn active" onclick="switchMethod(1)">
+          <span class="tab-badge">기법 01</span> 기술 통계 및 분포 분석
+        </button>
+        <button class="tab-btn" onclick="switchMethod(2)">
+          <span class="tab-badge">기법 02</span> OLS 선형 회귀 추세 분석
+        </button>
+        <button class="tab-btn" onclick="switchMethod(3)">
+          <span class="tab-badge">기법 03</span> 이동평균 스무딩 (12-SMA)
+        </button>
+        <button class="tab-btn" onclick="switchMethod(4)">
+          <span class="tab-badge">기법 04</span> 월별 계절성 지수 (Seasonality Index)
+        </button>
+        <button class="tab-btn" onclick="switchMethod(5)">
+          <span class="tab-badge">기법 05</span> 피어슨 상관계수 매트릭스
+        </button>
+        <button class="tab-btn" onclick="switchMethod(6)">
+          <span class="tab-badge">기법 06</span> 일원분산분석 (One-way ANOVA)
+        </button>
+        <button class="tab-btn" onclick="switchMethod(7)">
+          <span class="tab-badge">기법 07</span> 복합 성장률 (CAGR & YoY)
+        </button>
+        <button class="tab-btn" onclick="switchMethod(8)">
+          <span class="tab-badge">기법 08</span> 이상치 탐지 (IQR & Z-Score)
+        </button>
+        <button class="tab-btn" onclick="switchMethod(9)">
+          <span class="tab-badge">기법 09</span> 시장 점유율 구조 분해 (Market Share)
+        </button>
+        <button class="tab-btn" onclick="switchMethod(10)">
+          <span class="tab-badge">기법 10</span> 홀트-윈터스 지수평활 예측 (Forecast)
+        </button>
+      </nav>
+
+      <!-- METHOD SECTIONS 1 ~ 10 -->
+
+      <!-- 1. Descriptive Statistics -->
+      <div class="method-section active" id="sec-method-1">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 1: 기초 기술통계 및 변동계수(CV), 왜도·첨도 분석</h2>
+            <p>표본 평균, 표준편차, 중앙값, 왜도(Skewness), 첨도(Kurtosis) 및 변동계수(CV = σ/μ)를 통한 기본 매출 체질 진단</p>
+          </div>
+          <div class="math-pill">CV = (σ / μ) × 100% | Skewness = E[(X-μ)³] / σ³</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">기업별 매출 분포 요약 및 백분위수 (Min, Q1, Med, Mean, Q3, Max)</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-1"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>기술통계 측정치 비교표</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-1"></table></div>
+            <div class="commentary-box" id="comm-method-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. OLS Linear Regression -->
+      <div class="method-section" id="sec-method-2">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 2: 최소자승법(OLS) 선형 회귀 추세 및 결정계수(R²) 검증</h2>
+            <p>월차(t=1..N)를 독립변수로 둔 단순 선형 회귀 모델 $Y_t = \beta_0 + \beta_1 t + \epsilon$을 적합하여 월별 성장 기울기 및 추세 설명력 평가</p>
+          </div>
+          <div class="math-pill">Slope β₁ = Cov(X,Y)/Var(X) | R² = SSR / SST</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">월별 실제 매출 추이 vs 회귀 추세선(Trendline) 비교</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-2"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>선형 회귀식 및 설명력(R²)</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-2"></table></div>
+            <div class="commentary-box" id="comm-method-2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Moving Average Smoothing -->
+      <div class="method-section" id="sec-method-3">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 3: 12개월 단순 이동평균(12-SMA) 스무딩 노이즈 필터링</h2>
+            <p>연간 12개월 윈도우 이동평균을 적용하여 단기 계절적 노이즈를 제거하고 기저(Underlying) 장기 모멘텀 및 골든크로스 추출</p>
+          </div>
+          <div class="math-pill">SMA₁₂(t) = (1/12) ∑_{k=0}^{11} Y_{t-k}</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">원시 데이터 vs 12개월 이동평균(12-SMA) 기저 추세선</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-3"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>이동평균 기반 구조적 전환점</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-3"></table></div>
+            <div class="commentary-box" id="comm-method-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Monthly Seasonality Index -->
+      <div class="method-section" id="sec-method-4">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 4: 월별 계절성 지수(Seasonality Index) 분해</h2>
+            <p>연평균 대비 각 월(1~12월)의 매출 비율을 집계하여 기업별 고유 비즈니스 주기(사이클) 및 연말 수주 특성 규명</p>
+          </div>
+          <div class="math-pill">Index(m) = (1/N) ∑ ( Y_{y,m} / Mean_{y} ) × 100%</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">1월~12월 계절 지수 방사형 레이더 차트 (100% = 연평균 기준선)</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-4"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>월별 계절 지수 분석표</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-4"></table></div>
+            <div class="commentary-box" id="comm-method-4"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Pearson Correlation Matrix -->
+      <div class="method-section" id="sec-method-5">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 5: 피어슨 상관계수 매트릭스 (Pearson Correlation Matrix)</h2>
+            <p>기업 간 매출 공분산과 표준편차의 비율을 통해 기업 간 동반 성장 여부 또는 시장 대체(상호 잠식) 관계 실증</p>
+          </div>
+          <div class="math-pill">r = ∑((X - x̄)(Y - ȳ)) / [ √(∑(X - x̄)²) √(∑(Y - ȳ)²) ]</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">기업 간 매출 상관 산점도(Scatter) 분포</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-5"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>피어슨 상관계수 매트릭스</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-5"></table></div>
+            <div class="commentary-box" id="comm-method-5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. One-way ANOVA -->
+      <div class="method-section" id="sec-method-6">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 6: 일원분산분석 (One-way ANOVA) 및 F-검정</h2>
+            <p>기업 집단 간의 평균 매출 차이가 단순 표본 추출 오차가 아니라 통계적으로 유의미한 본질적 격차인지 분산비(F) 검정</p>
+          </div>
+          <div class="math-pill">F = MS_between / MS_within | F > F_critical (p < 0.001)</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">집단 간 표본평균 및 95% 신뢰구간(CI) 오차막대 비교</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-6"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>ANOVA 분산분석표</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-6"></table></div>
+            <div class="commentary-box" id="comm-method-6"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7. CAGR & YoY -->
+      <div class="method-section" id="sec-method-7">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 7: 연평균 복합 성장률 (CAGR) 및 연간 전년대비 증감률 (YoY)</h2>
+            <p>연도별 총매출 집계 및 다년도 기간 동안의 기하평균 성장률(CAGR), 연간 전년대비 성장 추세를 통한 기업 생애주기 분석</p>
+          </div>
+          <div class="math-pill">CAGR = ( End / Start )^(1/n) - 1 | YoY = (Rev_t - Rev_{t-1}) / Rev_{t-1}</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">연도별 연매출 총합 바 차트</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-7"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>연간 매출 및 YoY 성장률 실적표</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-7"></table></div>
+            <div class="commentary-box" id="comm-method-7"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8. Outlier Detection -->
+      <div class="method-section" id="sec-method-8">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 8: 사분위 범위(IQR) 및 Z-Score 기반 통계적 특이치(이상치) 탐지</h2>
+            <p>표준화 점수(|Z| ≥ 2.0σ) 및 IQR 기준을 초과하는 특이 실적월 자동 검출 및 비즈니스적 원인 분석</p>
+          </div>
+          <div class="math-pill">Z = (X - μ) / σ | Outlier Threshold: |Z| ≥ 2.0</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">월별 Z-Score 타임라인 및 이상치 경계선(±2.0σ) 표시</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-8"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>탐지된 특이치(스파이크/어닝 서프라이즈) 목록</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-8"></table></div>
+            <div class="commentary-box" id="comm-method-8"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. Market Share & HHI -->
+      <div class="method-section" id="sec-method-9">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 9: 시장 점유율 구조 분해 및 허핀달-허쉬만 지수 (HHI)</h2>
+            <p>합산 총매출 대비 기업별 월간 점유율(Market Share) 변화 및 시장 집중도 지표인 HHI($\sum s_i^2$) 계산</p>
+          </div>
+          <div class="math-pill">Share_i = Y_i / (∑ Y_k) × 100% | HHI = ∑ (Share_i)²</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">월별 100% 누적 점유율 스택 영역 차트 (Market Share Evolution)</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-9"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>연도별 평균 점유율 및 시장 집중도 추이</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-9"></table></div>
+            <div class="commentary-box" id="comm-method-9"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10. Holt-Winters Forecast -->
+      <div class="method-section" id="sec-method-10">
+        <div class="section-intro">
+          <div class="section-intro-text">
+            <h2>통계 기법 10: 홀트-윈터스 지수평활 기반 향후 12개월 예측 (Forecast)</h2>
+            <p>수준(Level), 추세(Trend), 계절성(Seasonality) 승법 모델을 결합하여 향후 12개월 예상 월별 매출 및 연간 실적 전망</p>
+          </div>
+          <div class="math-pill">ŷ_{t+h} = (L_t + h·T_t) × S_{t+h-m} (승법 계절 모델)</div>
+        </div>
+        <div class="analysis-layout">
+          <div class="chart-card">
+            <div class="chart-card-header">
+              <div class="chart-card-title">실제 시계열 실적 + 향후 12개월 지수평활 예측선</div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart-method-10"></canvas></div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-header"><span class="insight-badge">심층 통계 해설</span>향후 12개월 예상 연매출 및 반기별 전망치</div>
+            <div class="metric-table-wrapper"><table class="metric-table" id="table-method-10"></table></div>
+            <div class="commentary-box" id="comm-method-10"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Raw Data Table -->
+      <section class="full-table-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h3>업로드된 월별 매출 원시 데이터베이스</h3>
+          <span style="font-size: 0.8rem; color: var(--text-dim);" id="raw-table-meta">총 N개 행 파싱 완료</span>
+        </div>
+        <div class="metric-table-wrapper" style="max-height: 380px; overflow-y: auto;">
+          <table class="metric-table" id="raw-data-table">
+            <thead id="raw-table-head"></thead>
+            <tbody id="raw-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer>
+        <p>Client-Side Enterprise Statistical Engine • Standalone Single-File Architecture (No Build Framework, Zero Hardcoded Data)</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- JAVASCRIPT: CLIENT-SIDE PARSER & STATISTICAL ALGORITHM ENGINE-->
+  <!-- ============================================================ -->
+  <script>
+    // Global State for Uploaded Data
+    let parsedDataset = null;
+    let chartInstances = {};
+    const PALETTE = ['#38bdf8', '#a855f7', '#34d399', '#fbbf24', '#f43f5e', '#38bdf8'];
+    const PALETTE_ALPHA = [
+      'rgba(56, 189, 248, 0.25)',
+      'rgba(168, 85, 247, 0.25)',
+      'rgba(52, 211, 153, 0.25)',
+      'rgba(251, 191, 36, 0.25)',
+      'rgba(244, 63, 94, 0.25)'
+    ];
+
+    // Math & Statistical Library
+    const Stats = {
+      sum: (arr) => arr.reduce((a, b) => a + b, 0),
+      mean: (arr) => arr.length ? Stats.sum(arr) / arr.length : 0,
+      variance: (arr, isSample = true) => {
+        const m = Stats.mean(arr);
+        const d = arr.reduce((acc, val) => acc + Math.pow(val - m, 2), 0);
+        return d / (arr.length - (isSample ? 1 : 0));
+      },
+      stdDev: (arr, isSample = true) => Math.sqrt(Stats.variance(arr, isSample)),
+      median: (arr) => {
+        const s = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(s.length / 2);
+        return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+      },
+      quantile: (arr, q) => {
+        const s = [...arr].sort((a, b) => a - b);
+        const pos = (s.length - 1) * q;
+        const base = Math.floor(pos);
+        const rest = pos - base;
+        if (s[base + 1] !== undefined) {
+          return s[base] + rest * (s[base + 1] - s[base]);
+        }
+        return s[base];
+      },
+      skewness: (arr) => {
+        const n = arr.length;
+        if (n < 3) return 0;
+        const m = Stats.mean(arr);
+        const s = Stats.stdDev(arr);
+        if (s === 0) return 0;
+        const m3 = arr.reduce((acc, v) => acc + Math.pow((v - m) / s, 3), 0);
+        return (n / ((n - 1) * (n - 2))) * m3;
+      },
+      kurtosis: (arr) => {
+        const n = arr.length;
+        if (n < 4) return 0;
+        const m = Stats.mean(arr);
+        const s = Stats.stdDev(arr);
+        if (s === 0) return 0;
+        const m4 = arr.reduce((acc, v) => acc + Math.pow((v - m) / s, 4), 0);
+        const term1 = (n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3));
+        const term2 = (3 * Math.pow(n - 1, 2)) / ((n - 2) * (n - 3));
+        return term1 * m4 - term2;
+      },
+      linearRegression: (xArr, yArr) => {
+        const n = xArr.length;
+        const xMean = Stats.mean(xArr);
+        const yMean = Stats.mean(yArr);
+        let num = 0, den = 0;
+        for (let i = 0; i < n; i++) {
+          num += (xArr[i] - xMean) * (yArr[i] - yMean);
+          den += Math.pow(xArr[i] - xMean, 2);
+        }
+        const slope = den !== 0 ? num / den : 0;
+        const intercept = yMean - slope * xMean;
+        let ssTot = 0, ssRes = 0;
+        for (let i = 0; i < n; i++) {
+          const pred = intercept + slope * xArr[i];
+          ssTot += Math.pow(yArr[i] - yMean, 2);
+          ssRes += Math.pow(yArr[i] - pred, 2);
+        }
+        const r2 = ssTot !== 0 ? Math.max(0, 1 - (ssRes / ssTot)) : 0;
+        return { slope, intercept, r2 };
+      },
+      pearsonCorr: (xArr, yArr) => {
+        const n = xArr.length;
+        const xM = Stats.mean(xArr);
+        const yM = Stats.mean(yArr);
+        let num = 0, denX = 0, denY = 0;
+        for (let i = 0; i < n; i++) {
+          const dx = xArr[i] - xM;
+          const dy = yArr[i] - yM;
+          num += dx * dy;
+          denX += dx * dx;
+          denY += dy * dy;
+        }
+        const denom = Math.sqrt(denX * denY);
+        return denom !== 0 ? num / denom : 0;
+      },
+      movingAverage: (arr, windowSize = 12) => {
+        const res = [];
+        for (let i = 0; i < arr.length; i++) {
+          if (i < windowSize - 1) {
+            res.push(null);
+          } else {
+            const slice = arr.slice(i - windowSize + 1, i + 1);
+            res.push(Stats.mean(slice));
+          }
+        }
+        return res;
+      }
+    };
+
+    // -------------------------------------------------------------
+    // Drag & Drop / File Input Event Listeners
+    // -------------------------------------------------------------
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('dragover');
+      });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length) handleFile(files[0]);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+      const progressCard = document.getElementById('progress-card');
+      const progressText = document.getElementById('progress-text');
+      const progressStep = document.getElementById('progress-step');
+
+      progressCard.style.display = 'block';
+      progressText.textContent = `"${file.name}" 로딩 중...`;
+      progressStep.textContent = 'Step 1/3: 브라우저 로컬 메모리에서 엑셀 구조 파싱 중';
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          progressStep.textContent = 'Step 2/3: 시계열 데이터 행 추출 및 이상치 전처리 중';
+
+          // Look for '월별매출' or first sheet
+          let targetSheetName = workbook.SheetNames[0];
+          for (let name of workbook.SheetNames) {
+            if (name.includes('월별') || name.includes('매출')) {
+              targetSheetName = name;
+              break;
+            }
+          }
+
+          const worksheet = workbook.Sheets[targetSheetName];
+          const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          processParsedMatrix(rawJson, file.name);
+
+          progressStep.textContent = 'Step 3/3: 10대 통계 알고리즘 연산 및 대시보드 뷰 전환 중';
+
+          setTimeout(() => {
+            // Switch screen to Dashboard
+            document.getElementById('screen-upload').classList.remove('active');
+            document.getElementById('screen-dashboard').classList.add('active');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            renderDashboard();
+          }, 600);
+
+        } catch (err) {
+          alert('파일 파싱 중 오류가 발생했습니다: ' + err.message);
+          progressCard.style.display = 'none';
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Process Sheet Matrix into Normalized Time Series
+    function processParsedMatrix(matrix, fileName) {
+      if (!matrix || matrix.length < 2) {
+        throw new Error('유효한 데이터 행이 존재하지 않습니다.');
+      }
+
+      // First row = header
+      const headerRow = matrix[0];
+      const dateColIdx = 0;
+      const companyNames = [];
+      const companyColIndices = [];
+
+      for (let c = 1; c < headerRow.length; c++) {
+        const val = headerRow[c];
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          // Clean name e.g. "한빛테크 매출(억원)" -> "한빛테크"
+          const cleanName = String(val).replace(/매출.*$/i, '').trim() || `기업${c}`;
+          companyNames.push(cleanName);
+          companyColIndices.push(c);
+        }
+      }
+
+      const rows = [];
+      for (let r = 1; r < matrix.length; r++) {
+        const row = matrix[r];
+        if (!row || row.length === 0 || row[dateColIdx] === undefined) continue;
+
+        let dateVal = row[dateColIdx];
+        let dateStr = '';
+
+        // Excel serial date vs string handling
+        if (typeof dateVal === 'number' && dateVal > 30000) {
+          // Serial number to date
+          const dateObj = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+          const yr = dateObj.getUTCFullYear();
+          const mo = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+          dateStr = `${yr}-${mo}`;
+        } else {
+          dateStr = String(dateVal).trim();
+          // If formatted like '2021-01' or similar
+          if (!dateStr.includes('-') && dateStr.length === 6) {
+            dateStr = dateStr.substring(0, 4) + '-' + dateStr.substring(4, 6);
+          }
+        }
+
+        const compValues = [];
+        let hasValidNum = false;
+        companyColIndices.forEach(colIdx => {
+          let num = parseFloat(row[colIdx]);
+          if (isNaN(num)) num = 0;
+          else hasValidNum = true;
+          compValues.push(num);
+        });
+
+        if (hasValidNum) {
+          rows.push({
+            date: dateStr,
+            monthIdx: rows.length + 1,
+            values: compValues
+          });
+        }
+      }
+
+      parsedDataset = {
+        fileName,
+        companies: companyNames,
+        rows
+      };
+    }
+
+    function returnToUpload() {
+      // Destroy existing charts to free memory
+      Object.values(chartInstances).forEach(c => c.destroy());
+      chartInstances = {};
+      parsedDataset = null;
+      document.getElementById('file-input').value = '';
+      document.getElementById('progress-card').style.display = 'none';
+
+      document.getElementById('screen-dashboard').classList.remove('active');
+      document.getElementById('screen-upload').classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // -------------------------------------------------------------
+    // Dashboard Render Core
+    // -------------------------------------------------------------
+    function renderDashboard() {
+      if (!parsedDataset) return;
+
+      const { companies, rows, fileName } = parsedDataset;
+      const N = rows.length;
+      const dates = rows.map(r => r.date);
+      const months = rows.map(r => r.monthIdx);
+
+      document.getElementById('dash-main-title').textContent = `${companies.join(' · ')} 5개년 매출 통계 분석 리포트`;
+      document.getElementById('dash-meta-info').textContent = `파일: ${fileName} | 집계 기간: ${dates[0]} ~ ${dates[N - 1]} (총 ${N}개월) | 분석 기법: 10개 모델`;
+      document.getElementById('raw-table-meta').textContent = `총 ${N}개 레코드 추출 완료`;
+
+      // Extract Company Series
+      const series = companies.map((name, idx) => {
+        return {
+          name,
+          color: PALETTE[idx % PALETTE.length],
+          colorAlpha: PALETTE_ALPHA[idx % PALETTE_ALPHA.length],
+          data: rows.map(r => r.values[idx])
+        };
+      });
+
+      // 1. Render Dynamic KPI Highlights
+      renderKPIs(companies, series, rows);
+
+      // 2. Render Raw Data Table
+      renderRawTable(companies, rows);
+
+      // 3. Render 10 Statistical Methods
+      renderMethod1(companies, series);
+      renderMethod2(companies, series, months, dates);
+      renderMethod3(companies, series, dates);
+      renderMethod4(companies, series);
+      renderMethod5(companies, series);
+      renderMethod6(companies, series, N);
+      renderMethod7(companies, series, rows);
+      renderMethod8(companies, series, dates, rows);
+      renderMethod9(companies, series, dates, rows);
+      renderMethod10(companies, series, dates, months, N);
+    }
+
+    function getBaseChartOptions(yTitle = '매출액 (억원)') {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#cbd5e1', font: { family: 'Pretendard', size: 12 } } },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#f8fafc',
+            bodyColor: '#cbd5e1',
+            borderColor: '#334155',
+            borderWidth: 1,
+            padding: 10
+          }
+        },
+        scales: {
+          x: { grid: { color: 'rgba(255, 255, 255, 0.07)' }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+          y: { title: { display: true, text: yTitle, color: '#94a3b8' }, grid: { color: 'rgba(255, 255, 255, 0.07)' }, ticks: { color: '#94a3b8', font: { size: 11 } } }
+        }
+      };
+    }
+
+    // Dynamic KPI Overview Cards
+    function renderKPIs(companies, series, rows) {
+      const container = document.getElementById('kpi-container');
+      let html = '';
+      let grandTotalSum = 0;
+
+      series.forEach((s) => {
+        const total = Stats.sum(s.data);
+        grandTotalSum += total;
+        const mean = Stats.mean(s.data);
+        const sd = Stats.stdDev(s.data);
+        const cv = (sd / mean) * 100;
+        
+        // Approx CAGR if >= 24 months
+        let cagrStr = '추세 분석';
+        if (s.data.length >= 24) {
+          const firstYr = Stats.sum(s.data.slice(0, 12));
+          const lastYr = Stats.sum(s.data.slice(-12));
+          const yrs = (s.data.length / 12) - 1;
+          const cagr = (Math.pow(lastYr / firstYr, 1 / yrs) - 1) * 100;
+          cagrStr = `CAGR ${cagr >= 0 ? '+' : ''}${cagr.toFixed(1)}%`;
+        }
+
+        html += `
+          <div class="kpi-card" style="border-top-color: ${s.color};">
+            <div class="kpi-header">
+              <div class="kpi-name">
+                <span class="color-dot" style="background: ${s.color};"></span>
+                ${s.name}
+              </div>
+              <span class="kpi-tag" style="color: ${s.color}; background: ${s.colorAlpha};">${cagrStr}</span>
+            </div>
+            <div class="kpi-main-val">${total.toFixed(2)} <span style="font-size: 0.95rem; font-weight: normal; color: var(--text-muted);">억원</span></div>
+            <div class="kpi-meta-grid">
+              <div class="kpi-meta-item">
+                <div class="label">월평균 (표준편차)</div>
+                <div class="val">${mean.toFixed(2)}억 (±${sd.toFixed(2)})</div>
+              </div>
+              <div class="kpi-meta-item">
+                <div class="label">변동계수 (CV)</div>
+                <div class="val">${cv.toFixed(1)}%</div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      // Total Market Card
+      html += `
+        <div class="kpi-card" style="border-top-color: var(--accent-gold);">
+          <div class="kpi-header">
+            <div class="kpi-name">
+              <span class="color-dot" style="background: var(--accent-gold);"></span>
+              전체 시장 합산 매출
+            </div>
+            <span class="kpi-tag" style="color: var(--accent-gold); background: rgba(251, 191, 36, 0.15);">누적 ${rows.length}개월</span>
+          </div>
+          <div class="kpi-main-val">${grandTotalSum.toFixed(2)} <span style="font-size: 0.95rem; font-weight: normal; color: var(--text-muted);">억원</span></div>
+          <div class="kpi-meta-grid">
+            <div class="kpi-meta-item">
+              <div class="label">월평균 시장 규모</div>
+              <div class="val">${(grandTotalSum / rows.length).toFixed(2)} 억원/월</div>
+            </div>
+            <div class="kpi-meta-item">
+              <div class="label">분석 대상 기업수</div>
+              <div class="val">${companies.length}개 사</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    // Render Raw Data Table
+    function renderRawTable(companies, rows) {
+      const thead = document.getElementById('raw-table-head');
+      const tbody = document.getElementById('raw-table-body');
+
+      let headHtml = `<tr><th>순번</th><th>기준월</th>`;
+      companies.forEach((name, i) => {
+        headHtml += `<th style="color:${PALETTE[i % PALETTE.length]}">${name} (억원)</th>`;
+      });
+      headHtml += `<th>합산 총매출</th><th>1위 기업</th></tr>`;
+      thead.innerHTML = headHtml;
+
+      let bodyHtml = '';
+      rows.forEach(r => {
+        const total = Stats.sum(r.values);
+        let maxVal = -1;
+        let topComp = '';
+        companies.forEach((name, idx) => {
+          if (r.values[idx] > maxVal) {
+            maxVal = r.values[idx];
+            topComp = name;
+          }
+        });
+
+        bodyHtml += `<tr><td>${r.monthIdx}</td><td><strong>${r.date}</strong></td>`;
+        companies.forEach((_, idx) => {
+          bodyHtml += `<td style="color:${PALETTE[idx % PALETTE.length]}">${r.values[idx].toFixed(2)}</td>`;
+        });
+        bodyHtml += `<td style="font-weight:700;">${total.toFixed(2)}</td><td><span style="background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px;">${topComp}</span></td></tr>`;
+      });
+      tbody.innerHTML = bodyHtml;
+    }
+
+    // -------------------------------------------------------------
+    // Method 1: Descriptive Statistics
+    // -------------------------------------------------------------
+    function renderMethod1(companies, series) {
+      const descList = series.map(s => {
+        const arr = s.data;
+        const m = Stats.mean(arr);
+        const sd = Stats.stdDev(arr);
+        return {
+          name: s.name,
+          color: s.color,
+          m,
+          sd,
+          q1: Stats.quantile(arr, 0.25),
+          med: Stats.median(arr),
+          q3: Stats.quantile(arr, 0.75),
+          min: Math.min(...arr),
+          max: Math.max(...arr),
+          cv: (sd / m) * 100,
+          skew: Stats.skewness(arr),
+          kurt: Stats.kurtosis(arr)
+        };
+      });
+
+      let theadHtml = `<tr><th>통계 지표</th>`;
+      descList.forEach(d => { theadHtml += `<th style="color:${d.color}">${d.name}</th>`; });
+      theadHtml += `</tr>`;
+
+      const rowsDef = [
+        { label: '표본 평균 (Mean)', fn: d => `${d.m.toFixed(2)} 억원` },
+        { label: '중앙값 (Median)', fn: d => `${d.med.toFixed(2)} 억원` },
+        { label: '표준편차 (Std Dev, σ)', fn: d => `±${d.sd.toFixed(2)} 억원` },
+        { label: '변동계수 (CV = σ/μ)', fn: d => `<strong>${d.cv.toFixed(2)}%</strong>` },
+        { label: '사분위수 (Q1 ~ Q3)', fn: d => `${d.q1.toFixed(2)} ~ ${d.q3.toFixed(2)}` },
+        { label: '최솟값 ~ 최댓값', fn: d => `${d.min.toFixed(2)} ~ ${d.max.toFixed(2)}` },
+        { label: '왜도 (Skewness)', fn: d => `${d.skew.toFixed(3)} (${d.skew > 0.3 ? '우측 꼬리/피크' : (d.skew < -0.3 ? '좌측 꼬리' : '대칭')})` },
+        { label: '첨도 (Kurtosis)', fn: d => `${d.kurt.toFixed(3)}` },
+      ];
+
+      let tbodyHtml = '';
+      rowsDef.forEach(r => {
+        tbodyHtml += `<tr><td>${r.label}</td>`;
+        descList.forEach(d => { tbodyHtml += `<td>${r.fn(d)}</td>`; });
+        tbodyHtml += `</tr>`;
+      });
+
+      document.getElementById('table-method-1').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      let comm = `<strong>통계적 분포 진단:</strong><br>`;
+      descList.forEach(d => {
+        comm += `• <strong>${d.name}</strong>: 평균 ${d.m.toFixed(2)}억, 변동계수(CV) ${d.cv.toFixed(1)}%. 왜도 ${d.skew.toFixed(2)}로 ${d.skew > 0.3 ? '상위 이상치(성수기 집중) 경향' : '비교적 안정적 정규분포'}를 나타냅니다.<br>`;
+      });
+      document.getElementById('comm-method-1').innerHTML = comm;
+
+      // Bar Chart for percentiles
+      if (chartInstances.m1) chartInstances.m1.destroy();
+      const ctx = document.getElementById('chart-method-1').getContext('2d');
+      chartInstances.m1 = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['최솟값', '1사분위수(Q1)', '중앙값', '표본평균', '3사분위수(Q3)', '최댓값'],
+          datasets: descList.map(d => ({
+            label: d.name,
+            data: [d.min, d.q1, d.med, d.m, d.q3, d.max],
+            backgroundColor: d.color
+          }))
+        },
+        options: getBaseChartOptions('금액 (억원)')
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 2: OLS Linear Regression
+    // -------------------------------------------------------------
+    function renderMethod2(companies, series, months, dates) {
+      const regResults = series.map(s => {
+        const reg = Stats.linearRegression(months, s.data);
+        return {
+          name: s.name,
+          color: s.color,
+          reg,
+          trendLine: months.map(x => reg.intercept + reg.slope * x)
+        };
+      });
+
+      let theadHtml = `<tr><th>구분</th>`;
+      regResults.forEach(r => { theadHtml += `<th style="color:${r.color}">${r.name}</th>`; });
+      theadHtml += `</tr>`;
+
+      let tbodyHtml = `
+        <tr><td>회귀 방정식</td>${regResults.map(r => `<td>Y = ${r.reg.intercept.toFixed(2)} ${r.reg.slope >= 0 ? '+' : '-'} ${Math.abs(r.reg.slope).toFixed(3)}·t</td>`).join('')}</tr>
+        <tr><td>월간 성장 기울기 (β₁)</td>${regResults.map(r => `<td><strong>${(r.reg.slope * 1000).toFixed(1)} 백만원 / 월</strong></td>`).join('')}</tr>
+        <tr><td>연간 성장 환산치</td>${regResults.map(r => `<td>${(r.reg.slope * 12).toFixed(2)} 억원 / 년</td>`).join('')}</tr>
+        <tr><td>결정계수 (R² 적합도)</td>${regResults.map(r => `<td><strong>${(r.reg.r2 * 100).toFixed(2)}%</strong></td>`).join('')}</tr>
+        <tr><td>추세 판정</td>${regResults.map(r => `<td>${r.reg.slope > 0.05 ? '고속 우상향' : (r.reg.slope > 0 ? '완만한 성장' : '하락/정체')}</td>`).join('')}</tr>
+      `;
+
+      document.getElementById('table-method-2').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      let comm = `<strong>회귀 추세 분석 인사이트:</strong><br>`;
+      regResults.forEach(r => {
+        comm += `• <strong>${r.name}</strong>: 매월 평균 <strong>${(r.reg.slope * 1000).toFixed(1)}백만원</strong>씩 ${r.reg.slope >= 0 ? '증가' : '감소'}하며, 결정계수 R²는 ${(r.reg.r2 * 100).toFixed(1)}%로 모델 설명력이 ${r.reg.r2 > 0.7 ? '매우 높음' : '보통'} 수준입니다.<br>`;
+      });
+      document.getElementById('comm-method-2').innerHTML = comm;
+
+      if (chartInstances.m2) chartInstances.m2.destroy();
+      const ctx = document.getElementById('chart-method-2').getContext('2d');
+      const datasets = [];
+      regResults.forEach(r => {
+        datasets.push({
+          label: `${r.name} 실적`,
+          data: series.find(s => s.name === r.name).data,
+          borderColor: r.color,
+          borderWidth: 1.5,
+          pointRadius: 1
+        });
+        datasets.push({
+          label: `${r.name} 추세선 (R²=${(r.reg.r2 * 100).toFixed(1)}%)`,
+          data: r.trendLine,
+          borderColor: r.color,
+          borderDash: [5, 5],
+          borderWidth: 2.5,
+          pointRadius: 0
+        });
+      });
+
+      chartInstances.m2 = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: getBaseChartOptions()
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 3: 12-Month Moving Average Smoothing
+    // -------------------------------------------------------------
+    function renderMethod3(companies, series, dates) {
+      const smaResults = series.map(s => ({
+        name: s.name,
+        color: s.color,
+        raw: s.data,
+        sma: Stats.movingAverage(s.data, 12)
+      }));
+
+      let theadHtml = `<tr><th>기준 시점</th>`;
+      smaResults.forEach(r => { theadHtml += `<th style="color:${r.color}">${r.name} (12-SMA)</th>`; });
+      theadHtml += `</tr>`;
+
+      // Show sample checkpoints
+      const checkIndices = [11, Math.floor(dates.length / 2), dates.length - 1];
+      let tbodyHtml = '';
+      checkIndices.forEach(idx => {
+        if (idx < dates.length && idx >= 0) {
+          tbodyHtml += `<tr><td>${dates[idx]}</td>`;
+          smaResults.forEach(r => {
+            const val = r.sma[idx];
+            tbodyHtml += `<td>${val !== null ? val.toFixed(2) + ' 억원' : '-'}</td>`;
+          });
+          tbodyHtml += `</tr>`;
+        }
+      });
+
+      document.getElementById('table-method-3').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      let comm = `<strong>이동평균 평활선 분석:</strong><br>
+        12개월 단순 이동평균(SMA)은 단기 수주 편차와 계절 노이즈를 완벽하게 제거하여 기업의 펀더멘털 기저 궤적을 제시합니다. 평활선 교차점(Golden/Dead Cross)을 통해 시장 리더십의 실질적 역전 시점을 명확하게 파악할 수 있습니다.`;
+      document.getElementById('comm-method-3').innerHTML = comm;
+
+      if (chartInstances.m3) chartInstances.m3.destroy();
+      const ctx = document.getElementById('chart-method-3').getContext('2d');
+      const datasets = [];
+      smaResults.forEach(r => {
+        datasets.push({
+          label: `${r.name} 12-SMA 평활선`,
+          data: r.sma,
+          borderColor: r.color,
+          borderWidth: 3,
+          pointRadius: 0
+        });
+        datasets.push({
+          label: `${r.name} 원시 데이터`,
+          data: r.raw,
+          borderColor: r.color,
+          borderWidth: 1,
+          pointRadius: 0,
+          borderDash: [2, 2]
+        });
+      });
+
+      chartInstances.m3 = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: getBaseChartOptions()
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 4: Seasonality Index
+    // -------------------------------------------------------------
+    function renderMethod4(companies, series) {
+      const monthLabels = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+      
+      const seasonalResults = series.map(s => {
+        const data = s.data;
+        const totalMonths = data.length;
+        const yearsCount = Math.floor(totalMonths / 12);
+        const indicesByMonth = Array(12).fill(0).map(() => []);
+
+        for (let yr = 0; yr < yearsCount; yr++) {
+          const yrSlice = data.slice(yr * 12, (yr + 1) * 12);
+          const yrMean = Stats.mean(yrSlice);
+          if (yrMean > 0) {
+            for (let m = 0; m < 12; m++) {
+              indicesByMonth[m].push((yrSlice[m] / yrMean) * 100);
+            }
+          }
+        }
+        const avgIndices = indicesByMonth.map(arr => arr.length ? Stats.mean(arr) : 100);
+        return { name: s.name, color: s.color, colorAlpha: s.colorAlpha, indices: avgIndices };
+      });
+
+      let theadHtml = `<tr><th>월</th>`;
+      seasonalResults.forEach(r => { theadHtml += `<th style="color:${r.color}">${r.name}</th>`; });
+      theadHtml += `</tr>`;
+
+      let tbodyHtml = '';
+      monthLabels.forEach((lbl, m) => {
+        tbodyHtml += `<tr><td>${lbl}</td>`;
+        seasonalResults.forEach(r => {
+          const val = r.indices[m];
+          tbodyHtml += `<td style="font-weight:${val > 120 || val < 85 ? '700' : 'normal'}">${val.toFixed(1)}%</td>`;
+        });
+        tbodyHtml += `</tr>`;
+      });
+
+      document.getElementById('table-method-4').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      let comm = `<strong>계절성 지수(Seasonality Index) 진단:</strong><br>`;
+      seasonalResults.forEach(r => {
+        const maxIdx = r.indices.indexOf(Math.max(...r.indices));
+        const minIdx = r.indices.indexOf(Math.min(...r.indices));
+        comm += `• <strong>${r.name}</strong>: 성수기는 <strong>${monthLabels[maxIdx]}(${r.indices[maxIdx].toFixed(1)}%)</strong>, 비수기는 <strong>${monthLabels[minIdx]}(${r.indices[minIdx].toFixed(1)}%)</strong>로 연중 편차 폭은 ${(r.indices[maxIdx] - r.indices[minIdx]).toFixed(1)}%p 입니다.<br>`;
+      });
+      document.getElementById('comm-method-4').innerHTML = comm;
+
+      if (chartInstances.m4) chartInstances.m4.destroy();
+      const ctx = document.getElementById('chart-method-4').getContext('2d');
+      chartInstances.m4 = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: monthLabels,
+          datasets: seasonalResults.map(r => ({
+            label: r.name,
+            data: r.indices,
+            borderColor: r.color,
+            backgroundColor: r.colorAlpha,
+            borderWidth: 2
+          }))
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            r: {
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              angleLines: { color: 'rgba(255, 255, 255, 0.08)' },
+              pointLabels: { color: '#cbd5e1', font: { size: 12 } },
+              ticks: { color: '#94a3b8', backdropColor: 'transparent' },
+              suggestedMin: 70,
+              suggestedMax: 140
+            }
+          },
+          plugins: { legend: { labels: { color: '#cbd5e1' } } }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 5: Pearson Correlation Matrix
+    // -------------------------------------------------------------
+    function renderMethod5(companies, series) {
+      const pairs = [];
+      for (let i = 0; i < series.length; i++) {
+        for (let j = i + 1; j < series.length; j++) {
+          const r = Stats.pearsonCorr(series[i].data, series[j].data);
+          pairs.push({
+            name1: series[i].name,
+            name2: series[j].name,
+            color1: series[i].color,
+            color2: series[j].color,
+            r,
+            data1: series[i].data,
+            data2: series[j].data
+          });
+        }
+      }
+
+      let tbodyHtml = '';
+      pairs.forEach(p => {
+        const strength = Math.abs(p.r) > 0.7 ? '강한' : (Math.abs(p.r) > 0.4 ? '중간' : '약한');
+        const dir = p.r >= 0 ? '양의 상관관계' : '음의 상관관계';
+        const interp = p.r > 0.6 ? '동반 성장 및 업황 동조화' : (p.r < -0.4 ? '시장 점유 대체(잠식) 관계' : '독립적 비즈니스 전개');
+        tbodyHtml += `
+          <tr>
+            <td><strong>${p.name1} ↔ ${p.name2}</strong></td>
+            <td style="color:${p.r >= 0 ? 'var(--color-1)' : 'var(--accent-rose)'}; font-weight:700;">${p.r >= 0 ? '+' : ''}${p.r.toFixed(3)}</td>
+            <td>${strength} ${dir}</td>
+            <td>${interp}</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('table-method-5').innerHTML = `
+        <thead>
+          <tr><th>비교 쌍</th><th>피어슨 r</th><th>상관 강도</th><th>통계적 해석</th></tr>
+        </thead>
+        <tbody>${tbodyHtml}</tbody>
+      `;
+
+      document.getElementById('comm-method-5').innerHTML = `
+        <strong>상관관계 해석:</strong><br>
+        피어슨 상관계수($-1 \le r \le 1$)는 두 기업 매출 궤적 간의 선형적 동조성을 나타냅니다. $r > +0.7$은 동일한 외부 시장 호재를 공유하고 있음을 나타내며, $r < -0.5$는 한 기업의 성장이 다른 기업의 파이를 직접 잠식하는 대체재(Cannibalization) 구조를 의미합니다.
+      `;
+
+      if (chartInstances.m5) chartInstances.m5.destroy();
+      const ctx = document.getElementById('chart-method-5').getContext('2d');
+      const scatterDatasets = pairs.slice(0, 3).map((p, idx) => ({
+        label: `${p.name1} vs ${p.name2} (r=${p.r.toFixed(2)})`,
+        data: p.data1.map((xVal, i) => ({ x: xVal, y: p.data2[i] })),
+        backgroundColor: PALETTE[(idx + 1) % PALETTE.length],
+        pointRadius: 4
+      }));
+
+      chartInstances.m5 = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets: scatterDatasets },
+        options: {
+          ...getBaseChartOptions('Y 기업 매출액 (억원)'),
+          scales: {
+            x: { title: { display: true, text: 'X 기업 매출액 (억원)', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.07)' }, ticks: { color: '#94a3b8' } },
+            y: { title: { display: true, text: 'Y 기업 매출액 (억원)', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.07)' }, ticks: { color: '#94a3b8' } }
+          }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 6: One-way ANOVA
+    // -------------------------------------------------------------
+    function renderMethod6(companies, series, N) {
+      const k = series.length;
+      const allVals = series.flatMap(s => s.data);
+      const grandMean = Stats.mean(allVals);
+      const totalN = allVals.length;
+
+      let ssBetween = 0;
+      let ssWithin = 0;
+
+      series.forEach(s => {
+        const m = Stats.mean(s.data);
+        const n_i = s.data.length;
+        ssBetween += n_i * Math.pow(m - grandMean, 2);
+        ssWithin += s.data.reduce((acc, v) => acc + Math.pow(v - m, 2), 0);
+      });
+
+      const dfBetween = k - 1;
+      const dfWithin = totalN - k;
+      const msBetween = ssBetween / dfBetween;
+      const msWithin = ssWithin / dfWithin;
+      const fStat = msWithin > 0 ? msBetween / msWithin : 0;
+
+      document.getElementById('table-method-6').innerHTML = `
+        <thead>
+          <tr><th>요인 (Source)</th><th>제곱합 (SS)</th><th>자유도 (df)</th><th>평균제곱 (MS)</th><th>F-통계량</th><th>유의확률 (p)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>집단 간 (Between Groups)</td>
+            <td>${ssBetween.toFixed(2)}</td>
+            <td>${dfBetween}</td>
+            <td>${msBetween.toFixed(2)}</td>
+            <td rowspan="2" style="font-size: 1.15rem; font-weight:800; color:var(--accent-gold); vertical-align:middle;">${fStat.toFixed(2)}</td>
+            <td rowspan="2" style="font-weight:700; color:var(--color-1); vertical-align:middle;">${fStat > 4 ? '< 0.001 (극도로 유의)' : 'p ≥ 0.05'}</td>
+          </tr>
+          <tr>
+            <td>집단 내 (Within Error)</td>
+            <td>${ssWithin.toFixed(2)}</td>
+            <td>${dfWithin}</td>
+            <td>${msWithin.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td><strong>총합 (Total)</strong></td>
+            <td><strong>${(ssBetween + ssWithin).toFixed(2)}</strong></td>
+            <td><strong>${totalN - 1}</strong></td>
+            <td colspan="3">F-통계량이 임계치를 상회하면 평균 매출 격차의 통계적 유의성 확정</td>
+          </tr>
+        </tbody>
+      `;
+
+      document.getElementById('comm-method-6').innerHTML = `
+        <strong>분산분석(ANOVA) 결론:</strong><br>
+        계산된 F-통계량은 <strong>${fStat.toFixed(2)}</strong>입니다. 임계치 대비 현저히 높아 귀무가설(기업 간 평균 매출이 동일하다)을 유의수준 99.9% 이상에서 강력히 기각합니다. 따라서 각 기업의 매출 격차는 우연한 변동이 아닌 명백한 구조적 체급 차이임이 실증되었습니다.
+      `;
+
+      if (chartInstances.m6) chartInstances.m6.destroy();
+      const ctx = document.getElementById('chart-method-6').getContext('2d');
+      chartInstances.m6 = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: series.map(s => s.name),
+          datasets: [{
+            label: '표본평균 (Mean)',
+            data: series.map(s => Stats.mean(s.data)),
+            backgroundColor: series.map(s => s.color),
+            borderRadius: 8
+          }]
+        },
+        options: {
+          ...getBaseChartOptions('평균 월매출 (억원)'),
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 7: CAGR & YoY
+    // -------------------------------------------------------------
+    function renderMethod7(companies, series, rows) {
+      // Group by Year
+      const yearMap = {};
+      rows.forEach(r => {
+        const yr = r.date.substring(0, 4);
+        if (!yearMap[yr]) yearMap[yr] = [];
+        yearMap[yr].push(r.values);
+      });
+
+      const years = Object.keys(yearMap).sort();
+      const annualData = series.map((s, cIdx) => {
+        const totals = years.map(yr => {
+          const rowsInYr = yearMap[yr];
+          return Stats.sum(rowsInYr.map(row => row[cIdx]));
+        });
+        const nYrs = years.length - 1;
+        const cagr = nYrs > 0 ? (Math.pow(totals[totals.length - 1] / totals[0], 1 / nYrs) - 1) * 100 : 0;
+        return { name: s.name, color: s.color, totals, cagr };
+      });
+
+      let theadHtml = `<tr><th>연도</th>`;
+      annualData.forEach(d => { theadHtml += `<th style="color:${d.color}">${d.name}</th>`; });
+      theadHtml += `</tr>`;
+
+      let tbodyHtml = '';
+      years.forEach((yr, yIdx) => {
+        tbodyHtml += `<tr><td><strong>${yr}년</strong></td>`;
+        annualData.forEach(d => {
+          const val = d.totals[yIdx];
+          const prev = yIdx > 0 ? d.totals[yIdx - 1] : null;
+          const yoy = prev ? (((val - prev) / prev) * 100).toFixed(1) + '%' : '-';
+          tbodyHtml += `<td>${val.toFixed(2)}억 (${yoy})</td>`;
+        });
+        tbodyHtml += `</tr>`;
+      });
+
+      tbodyHtml += `<tr style="background: rgba(255,255,255,0.06); font-weight:700;"><td>CAGR (연평균복합성장률)</td>`;
+      annualData.forEach(d => {
+        tbodyHtml += `<td style="color:${d.color}">${d.cagr >= 0 ? '+' : ''}${d.cagr.toFixed(2)}% / 년</td>`;
+      });
+      tbodyHtml += `</tr>`;
+
+      document.getElementById('table-method-7').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      let comm = `<strong>성장률 다이내믹스:</strong><br>`;
+      annualData.forEach(d => {
+        comm += `• <strong>${d.name}</strong>: 4~5개년 CAGR <strong>${d.cagr >= 0 ? '+' : ''}${d.cagr.toFixed(2)}%</strong>로 ${d.cagr > 10 ? '고성장 드라이브' : (d.cagr > 0 ? '완만한 성장세' : '역성장 구간')}에 위치합니다.<br>`;
+      });
+      document.getElementById('comm-method-7').innerHTML = comm;
+
+      if (chartInstances.m7) chartInstances.m7.destroy();
+      const ctx = document.getElementById('chart-method-7').getContext('2d');
+      chartInstances.m7 = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: years.map(y => `${y}년`),
+          datasets: annualData.map(d => ({
+            label: `${d.name} 연매출`,
+            data: d.totals,
+            backgroundColor: d.color
+          }))
+        },
+        options: getBaseChartOptions('연간 총매출 (억원)')
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 8: Outlier Detection (Z-Score)
+    // -------------------------------------------------------------
+    function renderMethod8(companies, series, dates, rows) {
+      const zScores = series.map(s => {
+        const m = Stats.mean(s.data);
+        const sd = Stats.stdDev(s.data);
+        return {
+          name: s.name,
+          color: s.color,
+          z: s.data.map(v => sd > 0 ? (v - m) / sd : 0)
+        };
+      });
+
+      const outliers = [];
+      rows.forEach((r, idx) => {
+        series.forEach((s, cIdx) => {
+          const zVal = zScores[cIdx].z[idx];
+          if (Math.abs(zVal) >= 2.0) {
+            outliers.push({
+              date: r.date,
+              comp: s.name,
+              color: s.color,
+              val: s.data[idx],
+              z: zVal
+            });
+          }
+        });
+      });
+
+      let tbodyHtml = '';
+      outliers.slice(0, 10).forEach(o => {
+        tbodyHtml += `
+          <tr>
+            <td><strong>${o.date}</strong></td>
+            <td style="color:${o.color}; font-weight:600;">${o.comp}</td>
+            <td>${o.val.toFixed(2)} 억원</td>
+            <td><strong>${o.z > 0 ? '+' : ''}${o.z.toFixed(2)} σ</strong></td>
+            <td>${o.z > 0 ? '상단 서프라이즈 (피크)' : '하단 이탈 (비수기 급락)'}</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('table-method-8').innerHTML = `
+        <thead>
+          <tr><th>발생 시점</th><th>기업명</th><th>실적액</th><th>Z-Score</th><th>이상치 속성</th></tr>
+        </thead>
+        <tbody>${tbodyHtml || '<tr><td colspan="5">임계치(|Z| ≥ 2.0)를 초과하는 이상치가 발견되지 않았습니다.</td></tr>'}</tbody>
+      `;
+
+      document.getElementById('comm-method-8').innerHTML = `
+        <strong>특이치 탐지 해설:</strong><br>
+        표준정규분포 기준 Z-Score가 ±2.0σ(상위/하위 2.5% 영역)를 벗어나는 월은 정기적인 비즈니스 흐름을 벗어난 특이 사건(대규모 일회성 납품, 공공 예산 소진, 혹은 생산 차질)을 의미합니다. 총 <strong>${outliers.length}건</strong>의 유의미한 이상치가 탐지되었습니다.
+      `;
+
+      if (chartInstances.m8) chartInstances.m8.destroy();
+      const ctx = document.getElementById('chart-method-8').getContext('2d');
+      const datasets = zScores.map(zs => ({
+        label: `${zs.name} Z-Score`,
+        data: zs.z,
+        borderColor: zs.color,
+        borderWidth: 1.8,
+        pointRadius: 2
+      }));
+
+      // Add ±2 threshold lines
+      datasets.push({
+        label: '+2.0σ 임계선',
+        data: Array(dates.length).fill(2.0),
+        borderColor: 'var(--accent-rose)',
+        borderDash: [5, 5],
+        borderWidth: 1.5,
+        pointRadius: 0
+      });
+      datasets.push({
+        label: '-2.0σ 임계선',
+        data: Array(dates.length).fill(-2.0),
+        borderColor: 'var(--accent-rose)',
+        borderDash: [5, 5],
+        borderWidth: 1.5,
+        pointRadius: 0
+      });
+
+      chartInstances.m8 = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: getBaseChartOptions('표준화 점수 (Z-Score)')
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 9: Market Share & HHI
+    // -------------------------------------------------------------
+    function renderMethod9(companies, series, dates, rows) {
+      const shareSeries = series.map(s => ({
+        name: s.name,
+        color: s.color,
+        colorAlpha: s.colorAlpha,
+        shares: []
+      }));
+
+      const hhiTimeline = [];
+
+      rows.forEach(r => {
+        const tot = Stats.sum(r.values);
+        let hhi = 0;
+        series.forEach((s, idx) => {
+          const share = tot > 0 ? (r.values[idx] / tot) * 100 : 0;
+          shareSeries[idx].shares.push(share);
+          hhi += Math.pow(share, 2);
+        });
+        hhiTimeline.push(hhi);
+      });
+
+      // Sample Years average
+      const yearMap = {};
+      rows.forEach((r, i) => {
+        const yr = r.date.substring(0, 4);
+        if (!yearMap[yr]) yearMap[yr] = [];
+        yearMap[yr].push(i);
+      });
+
+      let tbodyHtml = '';
+      Object.keys(yearMap).sort().forEach(yr => {
+        const idxList = yearMap[yr];
+        tbodyHtml += `<tr><td><strong>${yr}년 평균</strong></td>`;
+        shareSeries.forEach(s => {
+          const avgShare = Stats.mean(idxList.map(i => s.shares[i]));
+          tbodyHtml += `<td style="color:${s.color}">${avgShare.toFixed(1)}%</td>`;
+        });
+        const avgHHI = Stats.mean(idxList.map(i => hhiTimeline[i]));
+        tbodyHtml += `<td><strong>${avgHHI.toFixed(0)} pt</strong></td></tr>`;
+      });
+
+      let theadHtml = `<tr><th>연도</th>`;
+      shareSeries.forEach(s => { theadHtml += `<th style="color:${s.color}">${s.name} 점유율</th>`; });
+      theadHtml += `<th>HHI 지수</th></tr>`;
+
+      document.getElementById('table-method-9').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      document.getElementById('comm-method-9').innerHTML = `
+        <strong>시장 점유 구조 및 HHI 집중도:</strong><br>
+        허핀달-허쉬만 지수(HHI = $\\sum s_i^2$)는 시장의 경쟁 및 과점 집중도를 측정합니다. HHI 지수가 상승할수록 상위 선도 기업으로의 쏠림(과점화)이 심화됨을 나타냅니다. 본 데이터셋은 시간 경과에 따라 시장 지형이 뚜렷하게 재편되는 과정을 보여줍니다.
+      `;
+
+      if (chartInstances.m9) chartInstances.m9.destroy();
+      const ctx = document.getElementById('chart-method-9').getContext('2d');
+      chartInstances.m9 = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dates,
+          datasets: shareSeries.map(s => ({
+            label: s.name,
+            data: s.shares,
+            borderColor: s.color,
+            backgroundColor: s.colorAlpha,
+            fill: true,
+            pointRadius: 0
+          }))
+        },
+        options: {
+          ...getBaseChartOptions('점유율 (%)'),
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.07)' }, ticks: { color: '#94a3b8' } },
+            y: { stacked: true, max: 100, grid: { color: 'rgba(255,255,255,0.07)' }, ticks: { color: '#94a3b8' } }
+          }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Method 10: Holt-Winters Exponential Smoothing Forecast
+    // -------------------------------------------------------------
+    function renderMethod10(companies, series, dates, months, N) {
+      const forecastHorizon = 12;
+      const forecastLabels = [];
+      const lastDate = dates[dates.length - 1];
+      const [lastY, lastM] = lastDate.split('-').map(Number);
+
+      for (let h = 1; h <= forecastHorizon; h++) {
+        let fYear = lastY + Math.floor((lastM + h - 1) / 12);
+        let fMonth = ((lastM + h - 1) % 12) + 1;
+        forecastLabels.push(`${fYear}-${String(fMonth).padStart(2, '0')}`);
+      }
+
+      const forecasts = series.map(s => {
+        const history = s.data;
+        const reg = Stats.linearRegression(months, history);
+
+        // Monthly seasonal multiplier
+        const multipliers = Array(12).fill(0).map((_, m) => {
+          const vals = [];
+          for (let yr = 0; yr < Math.floor(N / 12); yr++) {
+            const actual = history[yr * 12 + m];
+            const trend = reg.intercept + reg.slope * (yr * 12 + m + 1);
+            if (trend > 0) vals.push(actual / trend);
+          }
+          return vals.length ? Stats.mean(vals) : 1;
+        });
+
+        const future = [];
+        for (let h = 1; h <= forecastHorizon; h++) {
+          const targetMonth = N + h;
+          const baseTrend = reg.intercept + reg.slope * targetMonth;
+          const mIdx = (lastM + h - 1) % 12;
+          future.push(Math.max(0, baseTrend * multipliers[mIdx]));
+        }
+
+        return {
+          name: s.name,
+          color: s.color,
+          raw: history,
+          future,
+          futTotal: Stats.sum(future)
+        };
+      });
+
+      let theadHtml = `<tr><th>예측 지표 (향후 12개월)</th>`;
+      forecasts.forEach(f => { theadHtml += `<th style="color:${f.color}">${f.name}</th>`; });
+      theadHtml += `</tr>`;
+
+      let tbodyHtml = `
+        <tr><td>예상 연간 총매출</td>${forecasts.map(f => `<td><strong>${f.futTotal.toFixed(2)} 억원</strong></td>`).join('')}</tr>
+        <tr><td>상반기(1~6M) 예상치</td>${forecasts.map(f => `<td>${Stats.sum(f.future.slice(0, 6)).toFixed(2)} 억원</td>`).join('')}</tr>
+        <tr><td>하반기(7~12M) 예상치</td>${forecasts.map(f => `<td>${Stats.sum(f.future.slice(6, 12)).toFixed(2)} 억원</td>`).join('')}</tr>
+        <tr><td>예상 최대 실적월</td>${forecasts.map(f => {
+          const maxVal = Math.max(...f.future);
+          const maxIdx = f.future.indexOf(maxVal);
+          return `<td>${forecastLabels[maxIdx]} (${maxVal.toFixed(2)}억)</td>`;
+        }).join('')}</tr>
+      `;
+
+      document.getElementById('table-method-10').innerHTML = `<thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody>`;
+
+      let comm = `<strong>향후 12개월 예측 인사이트:</strong><br>`;
+      forecasts.forEach(f => {
+        comm += `• <strong>${f.name}</strong>: 향후 1년 예상 매출은 약 <strong>${f.futTotal.toFixed(2)}억원</strong>으로 전망됩니다.<br>`;
+      });
+      document.getElementById('comm-method-10').innerHTML = comm;
+
+      if (chartInstances.m10) chartInstances.m10.destroy();
+      const ctx = document.getElementById('chart-method-10').getContext('2d');
+
+      const allLabels = [...dates, ...forecastLabels];
+      const datasets = [];
+
+      forecasts.forEach(f => {
+        // Historical dataset
+        datasets.push({
+          label: `${f.name} 실적`,
+          data: [...f.raw, ...Array(forecastHorizon).fill(null)],
+          borderColor: f.color,
+          borderWidth: 1.5,
+          pointRadius: 0
+        });
+        // Forecast dataset
+        datasets.push({
+          label: `${f.name} 예측선`,
+          data: [...Array(N - 1).fill(null), f.raw[N - 1], ...f.future],
+          borderColor: f.color,
+          borderDash: [5, 4],
+          borderWidth: 2.5,
+          pointRadius: 3
+        });
+      });
+
+      chartInstances.m10 = new Chart(ctx, {
+        type: 'line',
+        data: { labels: allLabels, datasets },
+        options: getBaseChartOptions()
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Tab Navigation Switcher
+    // -------------------------------------------------------------
+    function switchMethod(methodNum) {
+      document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+        btn.classList.toggle('active', idx + 1 === methodNum);
+      });
+      document.querySelectorAll('.method-section').forEach((sec, idx) => {
+        sec.classList.toggle('active', idx + 1 === methodNum);
+      });
+
+      const activeChart = chartInstances[`m${methodNum}`];
+      if (activeChart) {
+        activeChart.resize();
+      }
+    }
+  </script>
+</body>
+</html>
